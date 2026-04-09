@@ -267,11 +267,11 @@ setMethod(f = "summary", signature = "mtergm", definition = function(object,
 #'
 #' @importFrom ergm ergm
 #' @export
-mtergm <- function(formula, constraints = ~ ., offset = FALSE, returndata = FALSE,
+mtergm <- function(formula, constraints = ~ ., offset_nodes = FALSE, returndata = FALSE,
     verbose = TRUE, ...) {
 
   # call tergmprepare and integrate results as a child environment in the chain
-  l <- tergmprepare(formula = formula, offset = offset, blockdiag = TRUE,
+  l <- tergmprepare(formula = formula, offset = offset_nodes, blockdiag = TRUE,
       verbose = verbose)
   for (i in 1:length(l$covnames)) {
     assign(l$covnames[i], l[[l$covnames[i]]])
