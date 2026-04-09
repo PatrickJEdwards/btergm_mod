@@ -733,11 +733,22 @@ tergmprepare <- function(formula, offset = TRUE, blockdiag = FALSE,
   }
 
   # offset preparation or node removal for MPLE
-  if (offset == TRUE) {
+  if (offset == TRUE) { 
     # add offset to formula and reassemble formula
-    l$rhs.terms[length(l$rhs.terms) + 1] <- "offset(edgecov(offsmat[[i]]))"
+    if (blockdiag == TRUE) {
+      # If blockdiag = TRUE, offsmat has already been collapsed to one block-diagonal
+      # matrix, so the formula must reference offsmat directly rather than offsmat[[i]].
+      l$rhs.terms[length(l$rhs.terms) + 1] <- "offset(edgecov(offsmat))"
+    } else {
+      l$rhs.terms[length(l$rhs.terms) + 1] <- "offset(edgecov(offsmat[[i]]))"
+    }
     rhs.operators[length(rhs.operators) + 1] <- "+"
-  } else {
+  }
+  #if (offset == TRUE) {
+  #  add offset to formula and reassemble formula
+  #  l$rhs.terms[length(l$rhs.terms) + 1] <- "offset(edgecov(offsmat[[i]]))"
+  #  rhs.operators[length(rhs.operators) + 1] <- "+"
+  #} else {
     # delete nodes with structural zeros
     if (l$auto.adjust == TRUE) {
       if (l$bipartite) {
@@ -797,7 +808,9 @@ tergmprepare <- function(formula, offset = TRUE, blockdiag = FALSE,
     # also save formula without time indices for ergm estimation
     l$form <- update.formula(l$form, networks ~ .)
     l$form <- paste(deparse(l$form), collapse = "")
-    l$form <- paste(l$form, "+ offset(edgecov(offsmat))")
+    # The offset(edgecov(offsmat)) term is now inserted above when blockdiag = TRUE,
+    # so do not append it again here or the formula will contain a duplicate/mismatched offset term.
+    #l$form <- paste(l$form, "+ offset(edgecov(offsmat))")
     l$form <- as.formula(l$form, env = environment())
     # make covariates block-diagonal
     if (length(l$covnames) > 1) {
