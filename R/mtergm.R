@@ -220,8 +220,6 @@ setMethod(f = "summary", signature = "mtergm", definition = function(object,
 #'
 #' @param constraints Constraints of the ERGM. See \code{\link[ergm]{ergm}} for
 #'   details.
-#' @param offset Logical. Should absent nodes be added as structural zeros
-#'   (`offset = TRUE`) or removed where they are not present (`offset = FALSE`)?
 #' @param ... Further arguments to be handed over to the
 #'   \code{\link[ergm]{ergm}} function.
 #' @inheritParams btergm
@@ -267,11 +265,11 @@ setMethod(f = "summary", signature = "mtergm", definition = function(object,
 #'
 #' @importFrom ergm ergm
 #' @export
-mtergm <- function(formula, constraints = ~ ., offset = FALSE, returndata = FALSE,
+mtergm <- function(formula, constraints = ~ ., returndata = FALSE,
     verbose = TRUE, ...) {
 
   # call tergmprepare and integrate results as a child environment in the chain
-  l <- tergmprepare(formula = formula, offset = offset, blockdiag = TRUE,
+  l <- tergmprepare(formula = formula, offset = FALSE, blockdiag = TRUE,
       verbose = verbose)
   for (i in 1:length(l$covnames)) {
     assign(l$covnames[i], l[[l$covnames[i]]])
@@ -323,7 +321,7 @@ mtergm <- function(formula, constraints = ~ ., offset = FALSE, returndata = FALS
       formula = formula,
       formula2 = l$form,
       auto.adjust = l$auto.adjust,
-      offset = l$offset, # Or `=offset`
+      offset = TRUE,
       directed = l$directed,
       bipartite = l$bipartite,
       estimate = e$estimate,  # MLE or MPLE
