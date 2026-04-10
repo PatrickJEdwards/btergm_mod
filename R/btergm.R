@@ -726,43 +726,97 @@ btergm <- function(formula,
   O <- NULL  # offset term
   for (i in 1:length(l$networks)) {
     pl <- ergm::ergmMPLE(form, control = control.ergm) # get the response, predictor matrix, weights, and offset values
+    
+    # Which columns of the MPLE predictor matrix are offset terms?
+    # This can include both the built-in structural-zero offset from offset=TRUE
+    # and any user-supplied formula offsets such as offset(edgecov(...)).
     offset_col_index <- which(attributes(pl)$etamap$offsettheta) # in which column of the predictor matrix are structural zeros stored (if any)?
     
-    # fix different factor levels across time points
-    if (i > 1 && ncol(X) != ifelse(offset, ncol(pl$predictor[, -offset_col_index]) + 1, ncol(pl$predictor) + 1)) {
+    # Combine all offset columns into one row-level forbidden-dyad indicator.
+    # A dyad is excluded if ANY offset source marks it as structurally impossible.
+    if (length(offset_col_index) == 0L) {
+      predictor_no_offset <- pl$predictor
+      combined_offset <- rep(0, nrow(pl$predictor))
+      offset_row_indices <- seq_len(nrow(pl$predictor))
+    } else {
+      offset_mat <- pl$predictor[, offset_col_index, drop = FALSE]
+      predictor_no_offset <- pl$predictor[, -offset_col_index, drop = FALSE]
+      
+      combined_offset <- as.numeric(rowSums(offset_mat != 0) > 0)
+      offset_row_indices <- which(combined_offset == 0)
+    }
+    
+    # Fix different factor levels across time points after removing offset columns.
+    if (i > 1 && ncol(X) != ncol(predictor_no_offset) + 1) {
       cn.x <- colnames(X)[-ncol(X)]  # exclude last column "i"
-      cn.i <- colnames(ifelse(offset, pl$predictor[, -offset_col_index], pl$predictor))
+      cn.i <- colnames(predictor_no_offset)
+      
       names.x <- cn.x[which(!cn.x %in% cn.i)]
       names.i <- cn.i[which(!cn.i %in% cn.x)]
+      
       if (length(names.x) > 0) {
-        for (nm in 1:length(names.x)) {
-          pl$predictor <- cbind(pl$predictor, rep(0, nrow(pl$predictor)))
-          colnames(pl$predictor)[ncol(pl$predictor)] <- names.x[nm]
+        for (nm in seq_along(names.x)) {
+          predictor_no_offset <- cbind(predictor_no_offset, rep(0, nrow(predictor_no_offset)))
+          colnames(predictor_no_offset)[ncol(predictor_no_offset)] <- names.x[nm]
         }
       }
+      
       if (length(names.i) > 0) {
-        for (nm in 1:length(names.i)) {
+        for (nm in seq_along(names.i)) {
           X <- cbind(X[, 1:(ncol(X) - 1)], rep(0, nrow(X)), X[, ncol(X)])
           colnames(X)[ncol(X) - 1] <- names.i[nm]
         }
       }
-    }  # end of column fix
-    
-    if (length(offset_col_index) == 0) {
-      offset_row_indices <- 1:nrow(pl$predictor) # no offset terms/structural zeros -> use all observations
-    } else {
-      offset_row_indices <- which(pl$predictor[, offset_col_index] == 0) # which rows of the predictor matrix indicate dyads that are not structural zeros?
     }
     
-    Y <- c(Y, pl$response[offset_row_indices]) # append the dependent variable where the values are not structural zeros
-    W <- c(W, pl$weights[offset_row_indices]) # append the weights for estimation for dyads unaffected by structural zeros
-    if (offset) {
-      X <- rbind(X, cbind(data.frame(pl$predictor[offset_row_indices, -offset_col_index], check.names = FALSE), i)) # append the predictor variables where the values are not structural zeros; omit the offset variable (if any); add a column for the time point
-      O <- c(O, pl$predictor[offset_row_indices, offset_col_index]) # append the number of zeros corresponding to the number of dyads unaffected by structural zeros
-    } else{
-      X <- rbind(X, cbind(data.frame(pl$predictor, check.names = FALSE), i)) # append the predictor variables where the values are not structural zeros; omit the offset variable (if any); add a column for the time point
-      O <- c(O, rep(0, nrow(pl$predictor))) # no structural zeros -> just append zeros for every observation as there are no offsets
-    }
+    # Keep only dyads not ruled out by ANY offset source.
+    Y <- c(Y, pl$response[offset_row_indices])
+    W <- c(W, pl$weights[offset_row_indices])
+    X <- rbind(
+      X,
+      cbind(
+        data.frame(predictor_no_offset[offset_row_indices, , drop = FALSE], check.names = FALSE),
+        i
+      )
+    )
+    O <- c(O, combined_offset[offset_row_indices])
+    
+    
+    # fix different factor levels across time points
+#    if (i > 1 && ncol(X) != ifelse(offset, ncol(pl$predictor[, -offset_col_index]) + 1, ncol(pl$predictor) + 1)) {
+#      cn.x <- colnames(X)[-ncol(X)]  # exclude last column "i"
+#      cn.i <- colnames(ifelse(offset, pl$predictor[, -offset_col_index], pl$predictor))
+#      names.x <- cn.x[which(!cn.x %in% cn.i)]
+#      names.i <- cn.i[which(!cn.i %in% cn.x)]
+#      if (length(names.x) > 0) {
+#        for (nm in 1:length(names.x)) {
+#          pl$predictor <- cbind(pl$predictor, rep(0, nrow(pl$predictor)))
+#          colnames(pl$predictor)[ncol(pl$predictor)] <- names.x[nm]
+#        }
+#      }
+#      if (length(names.i) > 0) {
+#        for (nm in 1:length(names.i)) {
+#          X <- cbind(X[, 1:(ncol(X) - 1)], rep(0, nrow(X)), X[, ncol(X)])
+#          colnames(X)[ncol(X) - 1] <- names.i[nm]
+#        }
+#      }
+#    }  # end of column fix
+#    
+#    if (length(offset_col_index) == 0) {
+#      offset_row_indices <- 1:nrow(pl$predictor) # no offset terms/structural zeros -> use all observations
+#    } else {
+#      offset_row_indices <- which(pl$predictor[, offset_col_index] == 0) # which rows of the predictor matrix indicate dyads that are not structural zeros?
+#    }
+#    
+#    Y <- c(Y, pl$response[offset_row_indices]) # append the dependent variable where the values are not structural zeros
+#    W <- c(W, pl$weights[offset_row_indices]) # append the weights for estimation for dyads unaffected by structural zeros
+#    if (offset) {
+#      X <- rbind(X, cbind(data.frame(pl$predictor[offset_row_indices, -offset_col_index], check.names = FALSE), i)) # append the predictor variables where the values are not structural zeros; omit the offset variable (if any); add a column for the time point
+#      O <- c(O, pl$predictor[offset_row_indices, offset_col_index]) # append the number of zeros corresponding to the number of dyads unaffected by structural zeros
+#    } else{
+#      X <- rbind(X, cbind(data.frame(pl$predictor, check.names = FALSE), i)) # append the predictor variables where the values are not structural zeros; omit the offset variable (if any); add a column for the time point
+#      O <- c(O, rep(0, nrow(pl$predictor))) # no structural zeros -> just append zeros for every observation as there are no offsets
+#    }
   }
   term.names <- colnames(X)[-length(colnames(X))]
   term.names <- c(term.names, "time")
@@ -775,7 +829,8 @@ btergm <- function(formula,
   time <- X$time
   rm(X)
   if (returndata == TRUE) {
-    return(cbind(Y, x))
+    return(cbind(Y, x, .offset = O))
+    #return(cbind(Y, x))
   }
 
   # create sparse matrix and compute start values for GLM
