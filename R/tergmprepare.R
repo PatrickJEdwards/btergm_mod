@@ -743,7 +743,7 @@ tergmprepare <- function(formula, offset = TRUE, blockdiag = FALSE,
       l$rhs.terms[length(l$rhs.terms) + 1] <- "offset(edgecov(offsmat[[i]]))"
     }
     rhs.operators[length(rhs.operators) + 1] <- "+"
-  } else {
+  }
   #if (offset == TRUE) {
   #  add offset to formula and reassemble formula
   #  l$rhs.terms[length(l$rhs.terms) + 1] <- "offset(edgecov(offsmat[[i]]))"
