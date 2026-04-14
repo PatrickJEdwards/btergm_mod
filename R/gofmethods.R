@@ -527,10 +527,18 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
                        parallel = c("no", "multicore", "snow"), ncpus = 1,
                        cl = NULL, statistics = c(dsp, esp, deg, ideg, geodesic,
                                                  rocpr, walktrap.modularity),
-                       verbose = TRUE, ...) {
+                       verbose = TRUE, 
+                       control.ergm = ergm::control.ergm(),
+                       ...) {
   
   if (nsim < 2) {
     stop("The 'nsim' argument must be greater than 1.")
+  }
+  
+  # Extract term options once and reuse
+  term_opts <- NULL
+  if (!is.null(control.ergm) && "term.options" %in% names(control.ergm)) {
+    term_opts <- control.ergm$term.options
   }
   
   if (is.function(statistics)) {
@@ -635,8 +643,8 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
     }
     
     # check for mismatch in coefficients and data
-    if (!"tbergm" %in% class(object) && length(coefs[!is.infinite(coefs)]) > ncol(ergm::ergmMPLE(form)$predictor)) {
-      mismatch <- names(coefs)[which(!names(coefs) %in% colnames(ergm::ergmMPLE(form)$predictor))]
+    if (!"tbergm" %in% class(object) && length(coefs[!is.infinite(coefs)]) > ncol(ergm::ergmMPLE(form, control = control.ergm)$predictor)) {
+      mismatch <- names(coefs)[which(!names(coefs) %in% colnames(ergm::ergmMPLE(form, control = control.ergm)$predictor))]
       mismatch <- mismatch[mismatch != ""]
       msg <- paste0("At t = ", i, ", at least one of the covariates has missing ",
                     "levels for which coefficients but no data were available. ",
@@ -673,7 +681,8 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
                                    coef = x,
                                    constraints = ~ .,
                                    control = ergm::control.simulate.formula(MCMC.interval = MCMC.interval,
-                                                                            MCMC.burnin = MCMC.burnin))
+                                                                            MCMC.burnin = MCMC.burnin,
+                                                                            term.options = term_opts))
           })
         } else {
           sim[[index]] <- ergm::simulate_formula(form,
@@ -681,7 +690,8 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
                                                  coef = coefs,
                                                  constraints = ~ .,
                                                  control = ergm::control.simulate.formula(MCMC.interval = MCMC.interval,
-                                                                                          MCMC.burnin = MCMC.burnin))
+                                                                                          MCMC.burnin = MCMC.burnin,
+                                                                                          term.options = term_opts))
         }
       }, 
       error = function(e) {
