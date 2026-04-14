@@ -611,12 +611,30 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
       coefs <- coefs[, -ncol(coefs)]
     }
   } else {
-    if (offset == TRUE) {
-      coefs <- c(coef(object), -Inf)  # -Inf for offset matrix
+    form_txt <- paste(deparse(form), collapse = "")
+    has_formula_offset <- grepl("offset\\(", form_txt)
+    
+    if (offset == TRUE || has_formula_offset) {
+      coefs <- c(coef(object), -Inf)  # append fixed coefficient for trailing offset term
     } else {
       coefs <- coef(object)
     }
   }
+
+  # extract coefficients from object
+  #if ("tbergm" %in% class(object)) {
+  #  coefs <- object@bergm$Theta[sample(1:nrow(object@bergm$Theta), nsim), ,
+  #                              drop = FALSE]
+  #  if (isFALSE(offset)) {
+  #    coefs <- coefs[, -ncol(coefs)]
+  #  }
+  #} else {
+  #  if (offset == TRUE) {
+  #    coefs <- c(coef(object), -Inf)  # -Inf for offset matrix
+  #  } else {
+  #    coefs <- coef(object)
+  #  }
+  #}
   
   # adjust formula at each step, and simulate networks
   sim <- list()
@@ -695,11 +713,13 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
         }
       }, 
       error = function(e) {
-        if (grep("elements, while the model requires", as.character(e))) {
-          message("Error: The number of ERGM coefficients does not correspond to the number of parameters the simulation function is expecting. This can occur if you employ curved model terms, such as gwesp, gwdegree etc., without explicitly adding ', fixed = TRUE' to the model term, for example '+ gwesp(0.5, fixed = TRUE). The MPLE-based estimation strategy currently does not permit curved terms (i.e., the parameters must be fixed). Please add ', fixed = TRUE' to the respective model term(s) while estimating the model and then use the gof function again. The original error message from the ergm package will follow.")
+        msg <- conditionMessage(e)
+        
+        if (grepl("elements, while the model requires", msg, fixed = TRUE)) {
+          message("Error: The number of ERGM coefficients does not correspond to the number of parameters the simulation function is expecting. This can occur if you employ curved model terms, such as gwesp, gwdegree etc., without explicitly adding ', fixed = TRUE' to the model term, for example '+ gwesp(0.5, fixed = TRUE)'. The MPLE-based estimation strategy currently does not permit curved terms (i.e., the parameters must be fixed). Please add ', fixed = TRUE' to the respective model term(s) while estimating the model and then use the gof function again. The original error message from the ergm package will follow.")
           stop(e)
         } else {
-          message("Error: Could not simulate any networks. Original error message follows.")
+          message("Error: Could not simulate any networks. Original error message follows:\n", msg)
           stop(e)
         }
       }, 
