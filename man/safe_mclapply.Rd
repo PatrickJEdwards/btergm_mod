@@ -11,7 +11,10 @@ safe_mclapply(
   ...,
   cl = NULL,
   packages = character(),
-  load_balance = TRUE
+  load_balance = TRUE,
+  parallel.type = c("auto", "fork", "psock", "serial"),
+  export = character(),
+  exportenv = parent.frame()
 )
 }
 \arguments{

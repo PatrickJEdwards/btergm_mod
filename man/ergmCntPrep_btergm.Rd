@@ -17,6 +17,8 @@ ergmCntPrep_btergm(
   sample.method = c("weighted", "random"),
   weight.type = c("TNT", "flatval"),
   cores = 1,
+  prep.parallel = c("auto", "fork", "psock", "serial"),
+  prep.cl = NULL,
   seed = NULL,
   must.count = 1,
   count_offset = NULL,

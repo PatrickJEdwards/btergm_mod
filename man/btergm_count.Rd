@@ -32,6 +32,8 @@ btergm_count(
   WtSumAsSampSiz = TRUE,
   seed = NULL,
   prep.cores = 1,
+  prep.parallel = c("auto", "fork", "psock", "serial"),
+  prep.cl = NULL,
   mple.cores = 1,
   ...
 )
