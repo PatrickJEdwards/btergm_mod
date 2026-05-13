@@ -67,10 +67,6 @@
 #'
 #' @importFrom ergm control.ergm
 #' @export
-
-
-
-
 btergm_count <- function(formula,
                          R = 500,
                          response = "tie_count",
