@@ -11,8 +11,8 @@
 \alias{summary.btergm_count}
 \alias{print.summary.btergm_count}
 \alias{coef,btergm_count-method}
-\alias{nobs,btergm_count-method}
 \alias{confint,btergm_count-method}
+\alias{nobs,btergm_count-method}
 \alias{summary,btergm_count-method}
 \title{Methods for btergm_count objects}
 \usage{
@@ -37,7 +37,8 @@
 \method{print}{summary.btergm_count}(x, digits = max(3, getOption("digits") - 3), ...)
 }
 \description{
-Basic methods for extracting, printing, summarizing, and constructing
-confidence intervals for fitted count-valued bootstrapped TERGM objects.
+Basic methods for extracting coefficients, printing fitted objects,
+computing observation counts, summarizing fitted models, and constructing
+bootstrap confidence intervals for count-valued bootstrapped TERGM objects.
 }
 \keyword{internal}

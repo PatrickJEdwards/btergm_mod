@@ -117,6 +117,15 @@ sampled edge-variable count.}
 
 \item{seed}{Optional random seed.}
 
+\item{prep.cores}{Number of cores used during count-MPLE preparation,
+including count support construction, reference-measure ratios, and
+change-score computation. This happens before the temporal bootstrap.}
+
+\item{prep.parallel}{Optional preparation-stage parallelization mode.
+Reserved for preparation workflows that parallelize across time periods.}
+
+\item{prep.cl}{Optional cluster object for preparation-stage parallelization.}
+
 \item{mple.cores}{Number of cores used inside each count-MPLE fit for
 edge-variable change-score calculations. Keep this at 1 when using outer
 bootstrap parallelization to avoid nested parallelism.}

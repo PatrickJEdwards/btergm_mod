@@ -236,6 +236,8 @@ is \code{10000}. There is no general rule of thumb on the selection of this
 parameter, but if the results look suspicious (e.g., when the model fit is
 perfect), increasing this value may be helpful.}
 
+\item{control.ergm}{Optional control settings passed to ERGM routines.}
+
 \item{period}{Which transition between time periods should be used for GOF
 assessment? By default, all transitions between all time periods are used.
 For example, if there are three consecutive networks, this will extract

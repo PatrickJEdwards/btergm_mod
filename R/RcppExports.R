@@ -2,10 +2,10 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 ergmCntNLPL_cpp <- function(coef, obj, rtype, rparam) {
-    .Call('_btergm_ergmCntNLPL_cpp', PACKAGE = 'btergm', coef, obj, rtype, rparam)
+    .Call(`_btergm_ergmCntNLPL_cpp`, coef, obj, rtype, rparam)
 }
 
 ergmCntNLPLDeriv_cpp <- function(coef, obj, rtype, rparam) {
-    .Call('_btergm_ergmCntNLPLDeriv_cpp', PACKAGE = 'btergm', coef, obj, rtype, rparam)
+    .Call(`_btergm_ergmCntNLPLDeriv_cpp`, coef, obj, rtype, rparam)
 }
 

@@ -213,6 +213,7 @@
 #' @importFrom ergm ergm_model nparam param_names
 #' @importFrom stats as.formula optim optimHess rnorm pnorm
 #' @importFrom MASS ginv
+#' @importFrom utils getFromNamespace
 #' @keywords internal
 ergmCntMPLE_btergm <- function(formula,
                                response,
@@ -242,7 +243,7 @@ ergmCntMPLE_btergm <- function(formula,
   if (verbose) message("Extracting network and preprocessing valued response.")
   
   nw0 <- ergm.getnetwork(formula);response2 <- response #here we use response2 because ergm_preprocess_response consumes the response string, but we need it later for ergmCntPrep (submitted as Issue#463 on github/ergm)
-  ergm_preprocess_response_fun <- getFromNamespace("ergm_preprocess_response", "ergm")
+  ergm_preprocess_response_fun <- utils::getFromNamespace("ergm_preprocess_response", "ergm")
   ergm_preprocess_response_fun(nw = nw0, response = response2)
   #generate new formula that use preprocessed networks
   
