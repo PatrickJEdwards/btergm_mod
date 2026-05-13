@@ -94,6 +94,8 @@ btergm_count <- function(formula,
                          WtSumAsSampSiz = TRUE,
                          seed = NULL,
                          prep.cores = 1, # used before bootstrap for ergmCntPrep_btergm()
+                         prep.parallel = c("auto", "fork", "psock", "serial"),
+                         prep.cl = NULL,
                          mple.cores = 1, # used inside MPLE calls, kept low for memory safety
                          ...) {
   
@@ -102,6 +104,7 @@ btergm_count <- function(formula,
   # ------------------------------------------------------------
   
   parallel <- match.arg(parallel)
+  prep.parallel <- match.arg(prep.parallel)
   reference <- match.arg(reference)
   sample.method <- match.arg(sample.method)
   weight.type <- match.arg(weight.type)
@@ -201,6 +204,7 @@ btergm_count <- function(formula,
     WtSumAsSampSiz = WtSumAsSampSiz,
     seed = seed,
     prep.cores = prep.cores,
+    prep.parallel = prep.parallel,
     mple.cores = mple.cores
   )
   
@@ -260,6 +264,8 @@ btergm_count <- function(formula,
     must.count = must.count,
     WtSumAsSampSiz = WtSumAsSampSiz,
     prep.cores = prep.cores,
+    prep.parallel = prep.parallel,
+    prep.cl = prep.cl,
     env = environment(),
     verbose = verbose
   )

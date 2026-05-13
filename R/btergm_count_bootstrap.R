@@ -96,6 +96,8 @@ btergm_count_precompute_period_preps <- function(form,
                                                  must.count,
                                                  WtSumAsSampSiz,
                                                  prep.cores,
+                                                 prep.parallel,
+                                                 prep.cl,
                                                  env,
                                                  verbose = TRUE) {
   preps <- vector("list", time_steps)
@@ -125,11 +127,14 @@ btergm_count_precompute_period_preps <- function(form,
       sample.size = sample.size,
       sample.method = sample.method,
       weight.type = weight.type,
-      cores = prep.cores, # prep.cores is used only here, before bootstrapping.
+      cores = prep.cores,
       seed = if (is.null(seed)) NULL else seed + tt,
       must.count = must.count,
       count_offset = count_offset[[tt]],
-      WtSumAsSampSiz = WtSumAsSampSiz
+      WtSumAsSampSiz = WtSumAsSampSiz,
+      prep.parallel = prep.parallel,
+      prep.cl = prep.cl,
+      verbose = verbose
     )
   }
   

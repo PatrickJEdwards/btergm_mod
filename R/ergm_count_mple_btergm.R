@@ -474,6 +474,8 @@ ergmCntPrep_btergm <- function(formula,
                                sample.method = c("weighted", "random"),
                                weight.type = c("TNT", "flatval"),
                                cores = 1,
+                               prep.parallel = c("auto", "fork", "psock", "serial"),
+                               prep.cl = NULL,
                                seed = NULL,
                                must.count = 1,
                                count_offset = NULL,
@@ -482,6 +484,12 @@ ergmCntPrep_btergm <- function(formula,
   
   if (verbose) message("Preparing count-MPLE object.")
   if (verbose) message("Extracting network and response matrix.")
+  
+  prep.parallel <- match.arg(prep.parallel)
+  
+  if (prep.parallel == "auto") {prep.parallel <- if (.Platform$OS.type == "windows") "psock" else "fork"}
+  
+  if (prep.parallel == "fork" && .Platform$OS.type == "windows") {stop("prep.parallel = 'fork' is not available on Windows.")}
   
   #Get the network, and set things up
   nw<-ergm.getnetwork(formula)
@@ -809,29 +817,67 @@ ergmCntPrep_btergm <- function(formula,
   
   
   ## NEW CODE (1): create one Windows PSOCK cluster once and reuse it for both `rmr` and `cs`
-  win_cl <- NULL
-  if (.Platform$OS.type == "windows" && cores > 1L) {
-    
-    if (verbose) {message("Starting Windows PSOCK cluster with ", cores, " cores.")}
-    
-    win_cl <- parallel::makeCluster(cores, type = "PSOCK")
-    on.exit(parallel::stopCluster(win_cl), add = TRUE)
-    
-    parallel::clusterCall(win_cl, function() {
+  #win_cl <- NULL
+  #if (.Platform$OS.type == "windows" && cores > 1L) {
+  #  
+  #  if (verbose) {message("Starting Windows PSOCK cluster with ", cores, " cores.")}
+  #  
+  #  win_cl <- parallel::makeCluster(cores, type = "PSOCK")
+  #  on.exit(parallel::stopCluster(win_cl), add = TRUE)
+  #  
+  #  parallel::clusterCall(win_cl, function() {
+  #    library(ergm)
+  #    library(network)
+  #    library(sna)
+  #    library(statnet.common)
+  #    NULL
+  #  })
+  #}
+  
+  ## NEW CODE (2):
+  prep_cl <- prep.cl
+  own_prep_cluster <- FALSE
+  if (cores > 1L && prep.parallel == "psock") {
+    if (is.null(prep_cl)) {
+      if (verbose) {message("Starting PSOCK cluster with ", cores, " cores for count-MPLE preparation.")}
+      prep_cl <- parallel::makeCluster(cores, type = "PSOCK")
+      own_prep_cluster <- TRUE
+      on.exit({if (own_prep_cluster && !is.null(prep_cl)) {parallel::stopCluster(prep_cl)}}, add = TRUE)
+    }
+    parallel::clusterCall(prep_cl, function() {
       library(ergm)
       library(network)
       library(sna)
       library(statnet.common)
       NULL
     })
+  } else if (cores > 1L && prep.parallel == "fork") {
+    if (verbose) {message("Using forked parallelism with ", cores, " cores for count-MPLE preparation.")}
+  } else {
+    if (verbose) {message("Using serial computation for count-MPLE preparation.")}
   }
+  
   
   if (verbose) message("Computing reference-measure ratios.")
   
   ## OLD CODE (1): #Ref meas ratio (one entry per EV)
   #rmr<-mclapply(1:ss,function(i){lrmr(yrng[[i]],y[i])},mc.cores=cores) 
   ## NEW CODE (2):
-  rmr <- safe_mclapply(seq_len(ss), function(i) {lrmr(yrng[[i]], y[i])}, cores = cores, cl = win_cl)
+  #rmr <- safe_mclapply(seq_len(ss), function(i) {lrmr(yrng[[i]], y[i])}, cores = cores, cl = win_cl)
+  ## NEW CODE (3):
+  rmr_fun <- function(i) {lrmr(yrng[[i]], y[i])}
+  # For PSOCK, avoid serializing the full local function environment if possible.
+  if (prep.parallel == "psock" && cores > 1L) {environment(rmr_fun) <- .GlobalEnv}
+  rmr <- safe_mclapply(
+    seq_len(ss),
+    rmr_fun,
+    cores = cores,
+    cl = prep_cl,
+    parallel.type = prep.parallel,
+    packages = character(),
+    export = c("lrmr", "yrng", "y"),
+    exportenv = environment()
+  )
   
   if (verbose) message("Finished computing reference-measure ratios.")
   
@@ -846,7 +892,21 @@ ergmCntPrep_btergm <- function(formula,
   ## NEW CODE (3): 
   #cs <- safe_mclapply(seq_len(ss), function(i) {ergm::ergm.godfather(object = formula, changes = lapply(yrng[[i]], function(z) {matrix(c(snd[i], rec[i], z), nrow = 1)}), response = response, changes.only = TRUE)}, cores = cores, cl = win_cl, packages = c("ergm", "network", "sna", "statnet.common"))
   ## NEW CODE (4): 
-  cs <- safe_mclapply(seq_len(ss), function(i) {ergm::ergm.godfather(object = formula_gf, changes = lapply(yrng[[i]], function(z) {matrix(c(snd[i], rec[i], z), nrow = 1)}), response = response, changes.only = TRUE)}, cores = cores, cl = win_cl, packages = c("ergm", "network", "sna", "statnet.common"))
+  #cs <- safe_mclapply(seq_len(ss), function(i) {ergm::ergm.godfather(object = formula_gf, changes = lapply(yrng[[i]], function(z) {matrix(c(snd[i], rec[i], z), nrow = 1)}), response = response, changes.only = TRUE)}, cores = cores, cl = win_cl, packages = c("ergm", "network", "sna", "statnet.common"))
+  ## NEW CODE (5):
+  cs_fun <- function(i) {ergm::ergm.godfather(object = formula_gf, changes = lapply(yrng[[i]], function(z) {matrix(c(snd[i], rec[i], z), nrow = 1)}), response = response, changes.only = TRUE)}
+  # For PSOCK, avoid capturing the full local parent environment.
+  if (prep.parallel == "psock" && cores > 1L) {environment(cs_fun) <- .GlobalEnv}
+  cs <- safe_mclapply(
+    seq_len(ss),
+    cs_fun,
+    cores = cores,
+    cl = prep_cl,
+    parallel.type = prep.parallel,
+    packages = c("ergm", "network", "sna", "statnet.common"),
+    export = c("formula_gf", "yrng", "snd", "rec", "response"),
+    exportenv = environment()
+  )
   
   if (verbose) message("Finished computing change scores.")
   
@@ -916,41 +976,52 @@ ergmCntPrep_btergm <- function(formula,
 #' @return A list.
 #'
 #' @keywords internal
-safe_mclapply <- function(X, FUN, cores = 1L, ..., cl = NULL, packages = character(), load_balance = TRUE) {
+safe_mclapply <- function(X,
+                          FUN,
+                          cores = 1L,
+                          ...,
+                          cl = NULL,
+                          packages = character(),
+                          load_balance = TRUE,
+                          parallel.type = c("auto", "fork", "psock", "serial"),
+                          export = character(),
+                          exportenv = parent.frame()) {
+  
   cores <- as.integer(cores)
+  parallel.type <- match.arg(parallel.type)
   
-  # Serial fallback
-  if (cores <= 1L) {
-    return(lapply(X, FUN, ...))
-  }
+  # Windows: use PSOCK cluster; Unix/macOS/Linux: use forked parallelism
+  if (parallel.type == "auto") {parallel.type <- if (.Platform$OS.type == "windows") "psock" else "fork"}
   
-  # Unix/macOS/Linux: use forked parallelism
-  if (.Platform$OS.type != "windows") {
+  # Serial fallback:
+  if (cores <= 1L || parallel.type == "serial") {return(lapply(X, FUN, ...))}
+  
+  
+  if (parallel.type == "fork") {
+    if (.Platform$OS.type == "windows") {stop("Forked parallelism is not available on Windows.")}
     return(parallel::mclapply(X, FUN, ..., mc.cores = cores))
   }
   
-  # Windows: use PSOCK cluster
-  own_cluster <- is.null(cl)
-  
-  if (own_cluster) {
-    cl <- parallel::makeCluster(cores, type = "PSOCK")
-    on.exit(parallel::stopCluster(cl), add = TRUE)
+  if (parallel.type == "psock") {
+    own_cluster <- is.null(cl)
+    
+    if (own_cluster) {
+      cl <- parallel::makeCluster(cores, type = "PSOCK")
+      on.exit(parallel::stopCluster(cl), add = TRUE)
+    }
+    # Load needed packages on Windows workers
+    if (length(packages) > 0L) {parallel::clusterCall(cl, function(pkgs) {invisible(lapply(pkgs, library, character.only = TRUE))}, packages)}
+    if (length(export) > 0L) {parallel::clusterExport(cl, varlist = export, envir = exportenv)}
+    
+    # Load-balanced version is usually better because some edge variables have much larger count-support sets than others.
+    if (load_balance) {
+      return(parallel::parLapplyLB(cl, X, FUN, ...))
+    } else {
+      return(parallel::parLapply(cl, X, FUN, ...))
+    }
   }
   
-  # Load needed packages on Windows workers
-  if (length(packages) > 0L) {
-    parallel::clusterCall(cl, function(pkgs) {
-      invisible(lapply(pkgs, library, character.only = TRUE))
-    }, packages)
-  }
-  
-  # Load-balanced version is usually better because some edge variables
-  # have much larger count-support sets than others.
-  if (load_balance) {
-    parallel::parLapplyLB(cl, X, FUN, ...)
-  } else {
-    parallel::parLapply(cl, X, FUN, ...)
-  }
+  stop("Unknown parallel.type: ", parallel.type)
 }
 
 
