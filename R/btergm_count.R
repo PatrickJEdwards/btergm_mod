@@ -363,6 +363,7 @@ btergm_count <- function(formula,
             library(sampling)
             library(trust)
             library(MASS)
+            library(btergm)
           })
           NULL
         }

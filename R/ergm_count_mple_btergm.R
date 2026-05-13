@@ -903,7 +903,7 @@ ergmCntPrep_btergm <- function(formula,
     cores = cores,
     cl = prep_cl,
     parallel.type = prep.parallel,
-    packages = c("ergm", "network", "sna", "statnet.common"),
+    packages = c("ergm", "network", "sna", "statnet.common", "btergm"),
     export = c("formula_gf", "yrng", "snd", "rec", "response"),
     exportenv = environment()
   )
