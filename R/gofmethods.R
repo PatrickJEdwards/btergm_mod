@@ -181,6 +181,7 @@
 #' @param varName The variable name that denotes the dependent networks in the
 #'   Siena model.
 #' @param verbose Print details?
+#' @param control.ergm Optional control settings passed to ERGM routines.
 #' @param ... Arbitrary further arguments to be passed on to the statistics. See
 #'   also the help page for the \link{gof-statistics}.
 #'

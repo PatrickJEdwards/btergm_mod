@@ -1,11 +1,28 @@
-# =============================================================================
-# Basic methods for btergm_count objects
-# =============================================================================
-
-
 # Register S3 list class for S4 method dispatch.
 methods::setOldClass("btergm_count")
 methods::setOldClass("summary.btergm_count")
+
+#' Methods for btergm_count objects
+#'
+#' Basic methods for extracting coefficients, printing fitted objects,
+#' computing observation counts, summarizing fitted models, and constructing
+#' bootstrap confidence intervals for count-valued bootstrapped TERGM objects.
+#'
+#' @name btergm_count_methods
+#' @aliases coef.btergm_count
+#' @aliases coef.ergmCntMPLE
+#' @aliases print.btergm_count
+#' @aliases nobs.btergm_count
+#' @aliases confint.btergm_count
+#' @aliases summary.btergm_count
+#' @aliases print.summary.btergm_count
+#' @aliases coef,btergm_count-method
+#' @aliases confint,btergm_count-method
+#' @aliases nobs,btergm_count-method
+#' @aliases summary,btergm_count-method
+#' @keywords internal
+NULL
+
 
 
 
@@ -21,6 +38,8 @@ btergm_count_coef <- function(object) {
   stop("Could not find coefficients in this btergm_count object.")
 }
 
+#' @rdname btergm_count_methods
+#' @method coef btergm_count
 #' @export
 coef.btergm_count <- function(object, ...) {
   btergm_count_coef(object)
@@ -29,6 +48,8 @@ methods::setMethod(f = "coef", signature = "btergm_count", definition = function
     btergm_count_coef(object)
   })
 
+#' @rdname btergm_count_methods
+#' @method print btergm_count
 #' @export
 print.btergm_count <- function(x, digits = max(3, getOption("digits") - 3), ...) {
   cat("\nCount-valued bootstrapped TERGM by MPLE\n")
@@ -51,7 +72,8 @@ print.btergm_count <- function(x, digits = max(3, getOption("digits") - 3), ...)
   invisible(x)
 }
 
-
+#' @rdname btergm_count_methods
+#' @method nobs btergm_count
 #' @export
 nobs.btergm_count <- function(object, ...) {
   c(
@@ -64,6 +86,8 @@ methods::setMethod(f = "nobs", signature = "btergm_count", definition = function
     nobs.btergm_count(object, ...)
   })
 
+#' @rdname btergm_count_methods
+#' @method confint btergm_count
 #' @export
 confint.btergm_count <- function(object, parm, level = 0.95, type = c("perc", "basic", "norm"), ...) {
   type <- match.arg(type)
@@ -149,6 +173,8 @@ methods::setMethod(f = "confint", signature = "btergm_count", definition = funct
     )
   })
 
+#' @rdname btergm_count_methods
+#' @method summary btergm_count
 #' @export
 summary.btergm_count <- function(object, level = 0.95, type = c("perc", "basic", "norm"), include.mple.se = TRUE, ...) {
   type <- match.arg(type)
@@ -200,6 +226,8 @@ methods::setMethod(f = "summary", signature = "btergm_count", definition = funct
     )
   })
 
+#' @rdname btergm_count_methods
+#' @method print summary.btergm_count
 #' @export
 print.summary.btergm_count <- function(x, digits = max(3, getOption("digits") - 3), ...) {
   cat("\n==============================\n")

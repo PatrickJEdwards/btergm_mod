@@ -272,6 +272,8 @@ btergm_count_extract_coef <- function(fit) {
   )
 }
 
+#' @rdname btergm_count_methods
+#' @method coef ergmCntMPLE
 #' @export
 coef.ergmCntMPLE <- function(object, ...) {
   if (!is.null(object$coef)) {

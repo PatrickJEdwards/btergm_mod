@@ -242,7 +242,8 @@ ergmCntMPLE_btergm <- function(formula,
   if (verbose) message("Extracting network and preprocessing valued response.")
   
   nw0 <- ergm.getnetwork(formula);response2 <- response #here we use response2 because ergm_preprocess_response consumes the response string, but we need it later for ergmCntPrep (submitted as Issue#463 on github/ergm)
-  ergm_preprocess_response(nw=nw0, response=response2)
+  ergm_preprocess_response_fun <- getFromNamespace("ergm_preprocess_response", "ergm")
+  ergm_preprocess_response_fun(nw = nw0, response = response2)
   #generate new formula that use preprocessed networks
   
   ## OLD CODE (1):
@@ -300,15 +301,12 @@ ergmCntMPLE_btergm <- function(formula,
                pseudoHuber=3,
                L1pH=3
   )
-  if(is.null(coef.init))
-    coef.init<-rnorm(np,sd=1e-3)
-  
-  if(optim.method=="trust"){
-    require(trust)
-    usetrust<-TRUE
-    ps<-rep(1,np)
-  }else{
-    usetrust<-FALSE
+  if (optim.method == "trust") {
+    if (!requireNamespace("trust", quietly = TRUE)) {stop("Package 'trust' is required for optim.method = 'trust'.", call. = FALSE)}
+    usetrust <- TRUE
+    ps <- rep(1, np)
+  } else {
+    usetrust <- FALSE
   }
   if(match.arg(regularization)=="L1pH"){
     regularization.param[2]<-0.1
@@ -317,9 +315,9 @@ ergmCntMPLE_btergm <- function(formula,
   if (verbose) {message("Starting optimization using method: ", optim.method, ".")}
   
   if(usetrust)
-    fit<-trust(objfun=ergmCntNLPLDeriv, parinit=coef.init, rinit=1, rmax=100, parscale=ps, obj=prep, rtype=rfun, rparam=regularization.param, ...)
+    fit<-trust::trust(objfun=ergmCntNLPLDeriv, parinit=coef.init, rinit=1, rmax=100, parscale=ps, obj=prep, rtype=rfun, rparam=regularization.param, ...)
   else
-    fit<-optim(coef.init, fn=ergmCntNLPL, obj=prep, rtype=rfun, rparam=regularization.param, method=optim.method, ...)
+    fit<-stats::optim(coef.init, fn=ergmCntNLPL, obj=prep, rtype=rfun, rparam=regularization.param, method=optim.method, ...)
   while((match.arg(regularization)=="L1pH")&&(regularization.param[2]>1e-7)){
     regularization.param[2]<-regularization.param[2]/2
     
@@ -327,9 +325,9 @@ ergmCntMPLE_btergm <- function(formula,
     
     #cat("\tReducing pseudo-Huber radius to",regularization.param[2],"\n")
     if(usetrust)
-      fit<-trust(objfun=ergmCntNLPLDeriv, parinit=fit$argument, rinit=1, rmax=100, parscale=ps, obj=prep, rtype=rfun, rparam=regularization.param, ...)
+      fit<-trust::trust(objfun=ergmCntNLPLDeriv, parinit=fit$argument, rinit=1, rmax=100, parscale=ps, obj=prep, rtype=rfun, rparam=regularization.param, ...)
     else
-      fit<-optim(fit$par, fn=ergmCntNLPL, obj=prep, rtype=rfun, rparam=regularization.param, method=optim.method, ...)
+      fit<-stats::optim(fit$par, fn=ergmCntNLPL, obj=prep, rtype=rfun, rparam=regularization.param, method=optim.method, ...)
   }
   
   if (verbose) {message("Optimization finished.")}
@@ -845,10 +843,28 @@ ergmCntPrep_btergm <- function(formula,
       on.exit({if (own_prep_cluster && !is.null(prep_cl)) {parallel::stopCluster(prep_cl)}}, add = TRUE)
     }
     parallel::clusterCall(prep_cl, function() {
-      library(ergm)
-      library(network)
-      library(sna)
-      library(statnet.common)
+      pkgs <- c(
+        "ergm",
+        "network",
+        "sna",
+        "statnet.common",
+        "btergm"
+      )
+      
+      ok <- vapply(
+        pkgs,
+        requireNamespace,
+        quietly = TRUE,
+        FUN.VALUE = logical(1)
+      )
+      
+      if (!all(ok)) {
+        stop(
+          "The following packages could not be loaded on the preparation workers: ",
+          paste(pkgs[!ok], collapse = ", ")
+        )
+      }
+      
       NULL
     })
   } else if (cores > 1L && prep.parallel == "fork") {

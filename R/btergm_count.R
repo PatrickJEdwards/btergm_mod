@@ -60,6 +60,12 @@
 #' @param mple.cores Number of cores used inside each count-MPLE fit for
 #'   edge-variable change-score calculations. Keep this at 1 when using outer
 #'   bootstrap parallelization to avoid nested parallelism.
+#' @param prep.cores Number of cores used during count-MPLE preparation,
+#'   including count support construction, reference-measure ratios, and
+#'   change-score computation. This happens before the temporal bootstrap.
+#' @param prep.parallel Optional preparation-stage parallelization mode.
+#'   Reserved for preparation workflows that parallelize across time periods.
+#' @param prep.cl Optional cluster object for preparation-stage parallelization.
 #' @param ... Additional arguments passed later to the count-MPLE optimizer.
 #'
 #' @return A fitted \code{btergm_count} object. In the current scaffold,
@@ -355,16 +361,31 @@ btergm_count <- function(formula,
       parallel::clusterEvalQ(
         boot_cl,
         {
-          suppressPackageStartupMessages({
-            library(ergm)
-            library(network)
-            library(sna)
-            library(statnet.common)
-            library(sampling)
-            library(trust)
-            library(MASS)
-            library(btergm)
-          })
+          pkgs <- c(
+            "ergm",
+            "network",
+            "sna",
+            "statnet.common",
+            "sampling",
+            "trust",
+            "MASS",
+            "btergm"
+          )
+          
+          ok <- vapply(
+            pkgs,
+            requireNamespace,
+            quietly = TRUE,
+            FUN.VALUE = logical(1)
+          )
+          
+          if (!all(ok)) {
+            stop(
+              "The following packages could not be loaded on the snow workers: ",
+              paste(pkgs[!ok], collapse = ", ")
+            )
+          }
+          
           NULL
         }
       )
