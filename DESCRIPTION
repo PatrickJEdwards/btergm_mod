@@ -12,6 +12,8 @@ Imports:
     utils,
     methods,
     graphics,
+    MASS,
+    sampling,
     network (>= 1.19.0),
     sna (>= 2.8),
     ergm (>= 4.8.1),
