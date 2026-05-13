@@ -40,6 +40,7 @@ createGOF(
   cl = NULL,
   statistics = c(dsp, esp, deg, ideg, geodesic, rocpr, walktrap.modularity),
   verbose = TRUE,
+  control.ergm = ergm::control.ergm(),
   ...
 )
 
@@ -55,6 +56,7 @@ createGOF(
   cl = NULL,
   statistics = c(dsp, esp, deg, ideg, geodesic, rocpr, walktrap.modularity),
   verbose = TRUE,
+  control.ergm = ergm::control.ergm(),
   ...
 )
 
@@ -70,6 +72,7 @@ createGOF(
   cl = NULL,
   statistics = c(dsp, esp, deg, ideg, geodesic, rocpr, walktrap.modularity),
   verbose = TRUE,
+  control.ergm = ergm::control.ergm(),
   ...
 )
 
@@ -85,6 +88,7 @@ createGOF(
   cl = NULL,
   statistics = c(dsp, esp, deg, ideg, geodesic, rocpr, walktrap.modularity),
   verbose = TRUE,
+  control.ergm = ergm::control.ergm(),
   ...
 )
 

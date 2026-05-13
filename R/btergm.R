@@ -50,17 +50,45 @@
 #'
 #' @importFrom utils packageDescription
 #' @noRd
+#.onAttach <- function(libname, pkgname) {
+#  desc  <- packageDescription(pkgname, libname)
+#  packageStartupMessage(
+#    'Package:  btergm\n',
+#    'Version:  ', desc$Version, '\n',
+#    'Date:     ', desc$Date, '\n',
+#    'Authors:  Philip Leifeld (University of Manchester)\n',
+#    '          Skyler J. Cranmer (The Ohio State University)\n',
+#    '          Bruce A. Desmarais (Pennsylvania State University)\n'
+#  )
+#}
 .onAttach <- function(libname, pkgname) {
-  desc  <- packageDescription(pkgname, libname)
+  desc <- tryCatch(
+    utils::packageDescription(pkgname, lib.loc = libname),
+    error = function(e) NULL
+  )
+  
+  version <- if (!is.null(desc) && !is.na(desc["Version"])) {
+    desc["Version"]
+  } else {
+    "development"
+  }
+  
+  date <- if (!is.null(desc) && !is.na(desc["Date"])) {
+    desc["Date"]
+  } else {
+    NA_character_
+  }
+  
   packageStartupMessage(
     'Package:  btergm\n',
-    'Version:  ', desc$Version, '\n',
-    'Date:     ', desc$Date, '\n',
+    'Version:  ', version, '\n',
+    'Date:     ', date, '\n',
     'Authors:  Philip Leifeld (University of Manchester)\n',
     '          Skyler J. Cranmer (The Ohio State University)\n',
     '          Bruce A. Desmarais (Pennsylvania State University)\n'
   )
 }
+
 
 #' Redefine S3 as S4 class for proper handling as part of the \code{btergm}
 #' class.

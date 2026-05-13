@@ -30,4 +30,4 @@ Suggests:
     ggplot2 (>= 2.0.0)
 Depends: R (>= 3.5)
 License: GPL (>= 2)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
