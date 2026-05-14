@@ -233,6 +233,8 @@ ergmCntMPLE_btergm <- function(formula,
                                seed = NULL,
                                must.count = 5,
                                prep = NULL,
+                               prep.parallel = c("auto", "fork", "psock", "serial"),
+                               prep.cl = NULL,
                                count_offset = NULL,
                                WtSumAsSampSiz = TRUE,
                                estimate.cov = TRUE,
@@ -242,6 +244,7 @@ ergmCntMPLE_btergm <- function(formula,
   if (verbose) message("Starting count-valued ERGM MPLE.")
   if (verbose) message("Extracting network and preprocessing valued response.")
   
+  prep.parallel <- match.arg(prep.parallel)
   nw0 <- ergm.getnetwork(formula);response2 <- response #here we use response2 because ergm_preprocess_response consumes the response string, but we need it later for ergmCntPrep (submitted as Issue#463 on github/ergm)
   ergm_preprocess_response_fun <- utils::getFromNamespace("ergm_preprocess_response", "ergm")
   ergm_preprocess_response_fun(nw = nw0, response = response2)
@@ -268,6 +271,27 @@ ergmCntMPLE_btergm <- function(formula,
   np<-nparam(mod)
   parnam<- param_names(mod)
   
+  # Set or validate starting values.
+  if (is.null(coef.init)) {
+    coef.init <- rep(0, np)
+  } else {
+    coef.init <- as.numeric(coef.init)
+    
+    if (length(coef.init) != np) {
+      stop(
+        "'coef.init' must have length equal to the number of model parameters. ",
+        "Expected ", np, " but got ", length(coef.init), ".",
+        call. = FALSE
+      )
+    }
+    
+    if (anyNA(coef.init) || any(!is.finite(coef.init))) {
+      stop("'coef.init' must contain only finite numeric values.", call. = FALSE)
+    }
+  }
+  
+  names(coef.init) <- parnam
+  
   if (verbose) {message("Model parsed: ", np, " parameter(s).")}
   
   rm(nw0);gc()
@@ -284,6 +308,8 @@ ergmCntMPLE_btergm <- function(formula,
       sample.size = sample.size,
       sample.method = sample.method,
       cores = cores,
+      prep.parallel = prep.parallel,
+      prep.cl = prep.cl,
       weight.type = weight.type,
       seed = seed,
       must.count = must.count,
@@ -1027,7 +1053,29 @@ safe_mclapply <- function(X,
       on.exit(parallel::stopCluster(cl), add = TRUE)
     }
     # Load needed packages on Windows workers
-    if (length(packages) > 0L) {parallel::clusterCall(cl, function(pkgs) {invisible(lapply(pkgs, library, character.only = TRUE))}, packages)}
+    if (length(packages) > 0L) {
+      parallel::clusterCall(
+        cl,
+        function(pkgs) {
+          ok <- vapply(
+            pkgs,
+            requireNamespace,
+            quietly = TRUE,
+            FUN.VALUE = logical(1)
+          )
+          
+          if (!all(ok)) {
+            stop(
+              "The following packages could not be loaded on workers: ",
+              paste(pkgs[!ok], collapse = ", ")
+            )
+          }
+          
+          NULL
+        },
+        packages
+      )
+    }
     if (length(export) > 0L) {parallel::clusterExport(cl, varlist = export, envir = exportenv)}
     
     # Load-balanced version is usually better because some edge variables have much larger count-support sets than others.
