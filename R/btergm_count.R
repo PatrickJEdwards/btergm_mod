@@ -401,8 +401,8 @@ btergm_count <- function(formula,
           "btergm_count_combine_preps",
           "btergm_count_extract_coef",
           "ergmCntMPLE_btergm",
-          "ergmCntNLPL",
-          "ergmCntNLPLDeriv",
+          "ergmCntNLPL_cpp",
+          "ergmCntNLPLDeriv_cpp",
           "%||%"
         ),
         envir = helper_env
