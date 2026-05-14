@@ -316,9 +316,9 @@ ergmCntMPLE_btergm <- function(formula,
   if (verbose) {message("Starting optimization using method: ", optim.method, ".")}
   
   if(usetrust)
-    fit<-trust::trust(objfun=ergmCntNLPLDeriv, parinit=coef.init, rinit=1, rmax=100, parscale=ps, obj=prep, rtype=rfun, rparam=regularization.param, ...)
+    fit<-trust::trust(objfun=ergmCntNLPLDeriv_cpp, parinit=coef.init, rinit=1, rmax=100, parscale=ps, obj=prep, rtype=rfun, rparam=regularization.param, ...)
   else
-    fit<-stats::optim(coef.init, fn=ergmCntNLPL, obj=prep, rtype=rfun, rparam=regularization.param, method=optim.method, ...)
+    fit<-stats::optim(coef.init, fn=ergmCntNLPL_cpp, obj=prep, rtype=rfun, rparam=regularization.param, method=optim.method, ...)
   while((match.arg(regularization)=="L1pH")&&(regularization.param[2]>1e-7)){
     regularization.param[2]<-regularization.param[2]/2
     
@@ -326,9 +326,9 @@ ergmCntMPLE_btergm <- function(formula,
     
     #cat("\tReducing pseudo-Huber radius to",regularization.param[2],"\n")
     if(usetrust)
-      fit<-trust::trust(objfun=ergmCntNLPLDeriv, parinit=fit$argument, rinit=1, rmax=100, parscale=ps, obj=prep, rtype=rfun, rparam=regularization.param, ...)
+      fit<-trust::trust(objfun=ergmCntNLPLDeriv_cpp, parinit=fit$argument, rinit=1, rmax=100, parscale=ps, obj=prep, rtype=rfun, rparam=regularization.param, ...)
     else
-      fit<-stats::optim(fit$par, fn=ergmCntNLPL, obj=prep, rtype=rfun, rparam=regularization.param, method=optim.method, ...)
+      fit<-stats::optim(fit$par, fn=ergmCntNLPL_cpp, obj=prep, rtype=rfun, rparam=regularization.param, method=optim.method, ...)
   }
   
   if (verbose) {message("Optimization finished.")}
@@ -355,7 +355,7 @@ ergmCntMPLE_btergm <- function(formula,
     } else {
       fit$pll.hessian <- -stats::optimHess(
         fit$par,
-        fn = ergmCntNLPL,
+        fn = ergmCntNLPL_cpp,
         obj = prep,
         rtype = rfun,
         rparam = regularization.param
@@ -1059,161 +1059,3 @@ safe_mclapply <- function(X,
 
 
 
-
-
-
-
-# Count-MPLE objective functions.
-#
-# These C++ functions are called internally by ergmCntMPLE_btergm().
-# They operate on an already prepared ERGMCntPrep object, so they do not
-# need to know about temporal structure, bootstrap resampling, or offset
-# matrices. Dyad exclusion happens upstream in ergmCntPrep_btergm().
-
-#Negative log pseudo-likelihood for ERGM count models, using precomputed quantities.
-Rcpp::cppFunction('double ergmCntNLPL(NumericVector coef, List obj, int rtype, NumericVector rparam){
-  double lpl=0.0,ils,pd,reg=0.0;
-  int i,j,k;
-
-  //Make sure that we were passed a legitimate input, lest we crash
-  if(!obj.inherits("ERGMCntPrep"))
-    stop("Must be called with an ERGMCntPrep object.");
-
-  //Go ahead and coerce the importance weights
-  NumericVector iw = as<NumericVector>(obj["iw"]);
-
-  //Gonna add it up
-  for(i=0;i<iw.size();i++){
-    //Set up the variables we will need
-    ils=0.0;
-    NumericVector rmr = as<NumericVector>(as<List>(obj["rmr"])[i]);
-    NumericMatrix cs = as<NumericMatrix>(as<List>(obj["cs"])[i]);
-    NumericVector ycwt = as<NumericVector>(as<List>(obj["ycwt"])[i]);
-    //Find the inverse log sum
-    for(j=0;j<rmr.size();j++){
-      pd=0.0;
-      for(k=0;k<coef.size();k++)
-        pd+=cs(j,k)*coef[k];
-      if(j==0)
-        ils=rmr[j]+pd+log(ycwt[j]);
-      else
-        ils=R::logspace_add(ils,rmr[j]+pd+log(ycwt[j]));
-    }
-    //Add to the total (multiplying by inverse inclusion weight)
-    lpl-=iw[i]*ils;
-  }
-  
-  //Check process
-  //Rcout << "Coef:";
-  //for(i=0;i<coef.size();i++)
-  //  Rcout << " " << coef[i];
-  //Rcout << " LPL: " << lpl << "\\n";
-
-  //Compute the regularization penalty, if any
-  if(rtype==1){                              //L1 regularization
-    for(i=0;i<coef.length();i++)
-      reg+=fabs(coef[i]);
-    reg*=rparam[0];
-  }else if(rtype==2){                        //L2 regularization
-    for(i=0;i<coef.length();i++)
-      reg+=coef[i]*coef[i];
-    reg*=rparam[0];
-  }else if(rtype==3){                        //pseudo-Huber regularization
-    for(i=0;i<coef.length();i++)
-      reg+=rparam[1]*(sqrt(1.0+coef[i]*coef[i]/(rparam[1]*rparam[1]))-1.0);
-    reg*=rparam[0];
-  }
-
-  //Return the negative log pseudo-likelihood (plus any regularization penalty)
-  return -lpl+reg;
-}')
-
-
-#Negative log pseudo-likelihood and derivatives for ERGM count models, using precomputed 
-#quantities.  Note that this output is formatted for the trust package.
-Rcpp::cppFunction('Rcpp::List ergmCntNLPLDeriv(NumericVector coef, List obj, int rtype, NumericVector rparam){
-  double lpl=0.0,ils,pd,reg=0.0;
-  int i,j,k,l,p=coef.size();
-  NumericVector gr(p),igr(p);                //Gradient of the lpl (penalized)
-  NumericMatrix hess(p,p),ihess(p,p);        //Hessian of the lpl (penalized)
-
-  //Make sure that we were passed a legitimate input, lest we crash
-  if(!obj.inherits("ERGMCntPrep"))
-    stop("Must be called with an ERGMCntPrep object.");
-
-  //Go ahead and coerce the importance weights
-  NumericVector iw = as<NumericVector>(obj["iw"]);
-
-  //Gonna add it up
-  for(i=0;i<iw.size();i++){
-    //Set up the variables we will need
-    ils=0.0;
-    NumericVector rmr = as<NumericVector>(as<List>(obj["rmr"])[i]);
-    NumericMatrix cs = as<NumericMatrix>(as<List>(obj["cs"])[i]);
-    NumericVector ycwt = as<NumericVector>(as<List>(obj["ycwt"])[i]);
-    for(j=0;j<p;j++){
-      igr[j]=0.0;
-      for(k=0;k<p;k++){
-        ihess(j,k)=0.0;
-      }
-    }
-    //Find the inverse log sum
-    for(j=0;j<rmr.size();j++){
-      pd=0.0;
-      for(k=0;k<p;k++)
-        pd+=cs(j,k)*coef[k];
-      if(j==0)
-        ils=rmr[j]+pd+log(ycwt[j]);
-      else
-        ils=R::logspace_add(ils,rmr[j]+pd+log(ycwt[j]));
-    }
-    //Have to make a second pass to get derivative elements (this is slower than one
-    //pass, but we need to precompute ils to avoid overflow issues)
-    for(j=0;j<rmr.size();j++){
-      pd=0.0;
-      for(k=0;k<p;k++)
-        pd+=cs(j,k)*coef[k];
-      for(k=0;k<p;k++){
-        igr[k]-=cs(j,k)*exp(rmr[j]+pd-ils)*ycwt[j];   //Local gradient contribution
-        for(l=0;l<p;l++){                             //Local Hessian contribution
-          ihess(k,l)+=cs(j,k)*cs(j,l)*exp(rmr[j]+pd-ils)*ycwt[j];
-        }
-      }
-    }
-    //Add to the total (multiplying by inverse inclusion weight)
-    lpl-=iw[i]*ils;                                                     //LPL
-    for(j=0;j<p;j++){
-      gr[j]-=iw[i]*igr[j];                                              //Gradient NLPL
-      for(k=0;k<p;k++){
-        hess(j,k)-=iw[i]*(igr[j]*igr[k]-ihess(j,k));                    //Hessian NLPL
-      }
-    }
-  }
-
-  //Compute the regularization penalty, if any
-  if(rtype==1){                              //L1 regularization
-    for(i=0;i<p;i++){
-      reg+=fabs(coef[i]);
-      gr[i]+=(coef[i] > 0.0 ? 1.0 : (coef[i] < 0.0 ? -1.0 : 0.0))*rparam[0];
-    }
-    reg*=rparam[0];
-  }else if(rtype==2){                        //L2 regularization
-    for(i=0;i<p;i++){
-      reg+=coef[i]*coef[i];
-      gr[i]+=2.0*coef[i]*rparam[0];
-      hess(i,i)+=2.0*rparam[0];
-    }
-    reg*=rparam[0];
-  }else if(rtype==3){                        //pseudo-Huber regularization
-    for(i=0;i<p;i++){
-      reg+=rparam[1]*(sqrt(1.0+coef[i]*coef[i]/(rparam[1]*rparam[1]))-1.0);
-      gr[i]+=rparam[0]*coef[i]/(rparam[1]*sqrt(1.0+coef[i]*coef[i]/(rparam[1]*rparam[1])));
-      hess(i,i)+=rparam[0]*rparam[1]/((rparam[1]*rparam[1]+coef[i]*coef[i])*sqrt(1.0+coef[i]*coef[i]/(rparam[i]*rparam[i])));
-    }
-    reg*=rparam[0];
-  }
-
-  //Return the penalized negative log pseudo-likelihood, gradient, and Hessian
-  List out = List::create(Named("value") = -lpl+reg, Named("gradient") = gr, Named("hessian") = hess);
-  return out;
-}')
