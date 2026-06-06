@@ -42,6 +42,188 @@ tergmprepare_count_dim_matrix <- function(obj, name, n_periods = NULL) {
 
 
 
+
+
+
+
+
+
+btergm_count_deparse1 <- function(x) {
+  paste(deparse(x, width.cutoff = 500L), collapse = "")
+}
+
+btergm_count_is_call_to <- function(x, fun) {
+  is.call(x) && identical(as.character(x[[1L]]), fun)
+}
+
+btergm_count_is_edge_or_dyad_cov_call <- function(x) {
+  is.call(x) &&
+    as.character(x[[1L]]) %in% c("edgecov", "dyadcov")
+}
+
+btergm_count_register_covariate <- function(x_expr, l, formula, blockdiag = FALSE) {
+  x_name <- btergm_count_deparse1(x_expr)
+  x_name <- trimws(x_name)
+  
+  # Built-in covariate strings should be left alone.
+  if (grepl("^['\"]", x_name)) {
+    return(list(arg = x_expr, l = l))
+  }
+  
+  # The preparation function should add [[i]] itself.
+  if (grepl("\\[\\[?\\s*i\\s*\\]?\\]", x_name)) {
+    stop(
+      "Covariate names are not allowed to use the internal index 'i': ",
+      x_name,
+      ". Please provide the unindexed list object before estimation."
+    )
+  }
+  
+  x_current <- eval(x_expr, envir = environment(formula))
+  
+  if (!x_name %in% l$covnames) {
+    l$covnames <- c(l$covnames, x_name)
+    l[[x_name]] <- x_current
+  }
+  
+  type <- class(x_current)[1L]
+  
+  if (grepl("[^\\]]\\]$", x_name)) {
+    # User-supplied indexing other than [[i]].
+    if (type %in% c(
+      "matrix", "network", "dgCMatrix", "dgTMatrix",
+      "dsCMatrix", "dsTMatrix", "dgeMatrix"
+    )) {
+      x_current <- list(x_current)
+      l[[x_name]] <- x_current
+    }
+    
+    if (length(x_current) != l$time.steps) {
+      stop(
+        x_name, " has ", length(x_current),
+        " elements, but there are ", l$time.steps,
+        " networks to be modeled."
+      )
+    }
+    
+    new_arg <- if (isTRUE(blockdiag)) {
+      x_expr
+    } else {
+      str2lang(paste0(x_name, "[[i]]"))
+    }
+    
+    return(list(arg = new_arg, l = l))
+  }
+  
+  if (type %in% c(
+    "matrix", "network", "dgCMatrix", "dgTMatrix",
+    "dsCMatrix", "dsTMatrix", "dgeMatrix"
+  )) {
+    # Time-invariant covariate: replicate across periods.
+    if (!type %in% c("matrix", "network")) {
+      x_current <- as.matrix(x_current)
+    }
+    
+    l[[x_name]] <- vector("list", l$time.steps)
+    for (tt in seq_len(l$time.steps)) {
+      l[[x_name]][[tt]] <- x_current
+    }
+    
+    new_arg <- if (isTRUE(blockdiag)) {
+      as.name(x_name)
+    } else {
+      str2lang(paste0(x_name, "[[i]]"))
+    }
+    
+    return(list(arg = new_arg, l = l))
+  }
+  
+  if (type == "list" || type == "network.list") {
+    # Time-varying covariate list.
+    if (length(x_current) != l$time.steps) {
+      stop(
+        x_name, " has ", length(x_current),
+        " elements, but there are ", l$time.steps,
+        " networks to be modeled."
+      )
+    }
+    
+    new_arg <- if (isTRUE(blockdiag)) {
+      as.name(x_name)
+    } else {
+      str2lang(paste0(x_name, "[[i]]"))
+    }
+    
+    return(list(arg = new_arg, l = l))
+  }
+  
+  # Fallback: try to convert to a matrix and replicate.
+  tryCatch(
+    {
+      x_current <- as.matrix(x_current)
+      l[[x_name]] <- vector("list", l$time.steps)
+      for (tt in seq_len(l$time.steps)) {
+        l[[x_name]][[tt]] <- x_current
+      }
+      
+      new_arg <- if (isTRUE(blockdiag)) {
+        as.name(x_name)
+      } else {
+        str2lang(paste0(x_name, "[[i]]"))
+      }
+      
+      list(arg = new_arg, l = l)
+    },
+    error = function(cond) {
+      stop("Object '", x_name, "' could not be converted to a matrix.")
+    }
+  )
+}
+
+btergm_count_index_edgecov_calls <- function(expr, l, formula, blockdiag = FALSE) {
+  if (btergm_count_is_edge_or_dyad_cov_call(expr)) {
+    reg <- btergm_count_register_covariate(
+      x_expr = expr[[2L]],
+      l = l,
+      formula = formula,
+      blockdiag = blockdiag
+    )
+    
+    expr[[2L]] <- reg$arg
+    
+    return(list(expr = expr, l = reg$l))
+  }
+  
+  if (is.call(expr) || is.pairlist(expr)) {
+    start <- if (is.call(expr)) 2L else 1L
+    
+    if (length(expr) >= start) {
+      for (jj in start:length(expr)) {
+        out <- btergm_count_index_edgecov_calls(
+          expr = expr[[jj]],
+          l = l,
+          formula = formula,
+          blockdiag = blockdiag
+        )
+        
+        expr[[jj]] <- out$expr
+        l <- out$l
+      }
+    }
+  }
+  
+  list(expr = expr, l = l)
+}
+
+
+
+
+
+
+
+
+
+
 #' Prepare data structure for count-valued TERGM estimation
 #'
 #' Prepare a count-valued temporal ERGM data structure for use with
@@ -282,85 +464,112 @@ tergmprepare_count <- function(formula, response = "count", offset = TRUE, block
   # preprocess dyadcov and edgecov terms, memory terms, and timecov terms
   covnames <- character()
   for (k in 1:length(l$rhs.terms)) {
-    if (grepl("((edge)|(dyad))cov", l$rhs.terms[k])) {  # edgecov or dyadcov
+    
+    
+    if (grepl("((edge)|(dyad))cov", l$rhs.terms[k])) {
       
-      # split up into components
-      if (grepl(",\\s*?((attr)|\\\")", l$rhs.terms[k])) { # with attrib arg.
-        s <- "((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,\\s*a*.*?)\\)(?:\\))?)"
-      } else { # without attribute argument
-        s <- "((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,*\\s*a*.*?)\\)(?:\\))?)"
-      }
-      x1 <- sub(s, "\\1", l$rhs.terms[k], perl = TRUE)  # before the covariate
-      x2 <- sub(s, "\\5", l$rhs.terms[k], perl = TRUE)  # name of the cov.
-      if (grepl("\\[.*\\]", x2)) {
-        stop(paste0("Covariate names are not allowed to have indices: ", x2,
-                    ". Please prepare a list object before estimation."))
-      }
-      if (grepl("^\"", x2)) next  # ignore built-in matrices b/c conformable
-      x3 <- sub(s, "\\6", l$rhs.terms[k], perl = TRUE)  # after the covariate
-      x.current <- eval(parse(text = x2), envir = environment(formula))
-      type <- class(x.current)[1]
-      l$covnames <- c(l$covnames, x2)
-      l[[x2]] <- x.current
-      if (grepl("\\[i\\]+$", x2)) {
-        stop(paste0("Error in the following model term: ", l$rhs.terms[k],
-                    ". The index 'i' is used internally by btergm. Please use a ",
-                    "different index, for example 'j'."))
-      }
+      term_expr <- tryCatch(
+        str2lang(l$rhs.terms[k]),
+        error = function(e) {
+          stop(
+            "Could not parse RHS term while preparing edgecov/dyadcov term: ",
+            l$rhs.terms[k],
+            "\nOriginal error: ",
+            conditionMessage(e)
+          )
+        }
+      )
       
-      # add brackets if necessary, convert to list, and reassemble rhs term
-      if (grepl("[^\\]]\\]$", x2)) {
-        # time-varying covariate with given indices (e.g., formula[1:5])
-        l$rhs.terms[k] <- paste0(x1, x2, x3)
-        if (type %in% c("matrix", "network", "dgCMatrix", "dgTMatrix",
-                        "dsCMatrix", "dsTMatrix", "dgeMatrix")) {
-          x.current <-list(x.current)
-          l[[x2]] <- x.current
-        }
-        if (length(x.current) != l$time.steps) {
-          stop(paste(x2, "has", length(x.current), "elements, but there are",
-                     l$time.steps, "networks to be modeled."))
-        }
-        if (blockdiag == TRUE) {
-          # do not add brackets
-        } else {
-          x2 <- paste0(x2, "[[i]]")
-        }
-      } else if (type %in% c("matrix", "network", "dgCMatrix", "dgTMatrix",
-                             "dsCMatrix", "dsTMatrix", "dgeMatrix")) {
-        # time-independent covariate
-        if (!type %in% c("matrix", "network")) {
-          x.current <- as.matrix(x.current)
-        }
-        l[[x2]] <- list()
-        for (i in 1:l$time.steps) {
-          l[[x2]][[i]] <- x.current
-        }
-        if (blockdiag == TRUE) {
-          # do not add brackets
-        } else {
-          x2 <- paste0(x2, "[[i]]")
-        }
-        l$rhs.terms[k] <- paste(x1, x2, x3, sep = "")
-      } else if (type == "list" || type == "network.list") {
-        # time-varying covariate
-        if (length(x.current) != l$time.steps) {
-          stop(paste(x2, "has", length(get(x2)), "elements, but there are", l$time.steps, "networks to be modeled."))
-        }
-        if (blockdiag == TRUE) {
-          # do not add brackets
-        } else {
-          x2 <- paste0(x2, "[[i]]")
-        }
-        l$rhs.terms[k] <- paste0(x1, x2, x3)
-      } else {  # something else --> try to convert to matrix list
-        tryCatch(
-          {
-            l[[x2]] <- list(rep(as.matrix(x.current)), l$time.steps)
-          },
-          error = function(cond) {stop(paste0("Object '", x2, "' could not be converted to a matrix."))}
-        )
-      }
+      out <- btergm_count_index_edgecov_calls(
+        expr = term_expr,
+        l = l,
+        formula = formula,
+        blockdiag = blockdiag
+      )
+      
+      l <- out$l
+      l$rhs.terms[k] <- btergm_count_deparse1(out$expr)
+      
+      
+    #if (grepl("((edge)|(dyad))cov", l$rhs.terms[k])) {  # edgecov or dyadcov
+    #  
+    #  # split up into components
+    #  if (grepl(",\\s*?((attr)|\\\")", l$rhs.terms[k])) { # with attrib arg.
+    #    s <- "((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,\\s*a*.*?)\\)(?:\\))?)"
+    #  } else { # without attribute argument
+    #    s <- "((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,*\\s*a*.*?)\\)(?:\\))?)"
+    #  }
+    #  x1 <- sub(s, "\\1", l$rhs.terms[k], perl = TRUE)  # before the covariate
+    #  x2 <- sub(s, "\\5", l$rhs.terms[k], perl = TRUE)  # name of the cov.
+    #  if (grepl("\\[.*\\]", x2)) {
+    #    stop(paste0("Covariate names are not allowed to have indices: ", x2,
+    #                ". Please prepare a list object before estimation."))
+    #  }
+    #  if (grepl("^\"", x2)) next  # ignore built-in matrices b/c conformable
+    #  x3 <- sub(s, "\\6", l$rhs.terms[k], perl = TRUE)  # after the covariate
+    #  x.current <- eval(parse(text = x2), envir = environment(formula))
+    #  type <- class(x.current)[1]
+    #  l$covnames <- c(l$covnames, x2)
+    #  l[[x2]] <- x.current
+    #  if (grepl("\\[i\\]+$", x2)) {
+    #    stop(paste0("Error in the following model term: ", l$rhs.terms[k],
+    #                ". The index 'i' is used internally by btergm. Please use a ",
+    #                "different index, for example 'j'."))
+    #  }
+    #  
+    #  # add brackets if necessary, convert to list, and reassemble rhs term
+    #  if (grepl("[^\\]]\\]$", x2)) {
+    #    # time-varying covariate with given indices (e.g., formula[1:5])
+    #    l$rhs.terms[k] <- paste0(x1, x2, x3)
+    #    if (type %in% c("matrix", "network", "dgCMatrix", "dgTMatrix",
+    #                    "dsCMatrix", "dsTMatrix", "dgeMatrix")) {
+    #      x.current <-list(x.current)
+    #      l[[x2]] <- x.current
+    #    }
+    #    if (length(x.current) != l$time.steps) {
+    #      stop(paste(x2, "has", length(x.current), "elements, but there are",
+    #                 l$time.steps, "networks to be modeled."))
+    #    }
+    #    if (blockdiag == TRUE) {
+    #      # do not add brackets
+    #    } else {
+    #      x2 <- paste0(x2, "[[i]]")
+    #    }
+    #  } else if (type %in% c("matrix", "network", "dgCMatrix", "dgTMatrix",
+    #                         "dsCMatrix", "dsTMatrix", "dgeMatrix")) {
+    #    # time-independent covariate
+    #    if (!type %in% c("matrix", "network")) {
+    #      x.current <- as.matrix(x.current)
+    #    }
+    #    l[[x2]] <- list()
+    #    for (i in 1:l$time.steps) {
+    #      l[[x2]][[i]] <- x.current
+    #    }
+    #    if (blockdiag == TRUE) {
+    #      # do not add brackets
+    #    } else {
+    #      x2 <- paste0(x2, "[[i]]")
+    #    }
+    #    l$rhs.terms[k] <- paste(x1, x2, x3, sep = "")
+    #  } else if (type == "list" || type == "network.list") {
+    #    # time-varying covariate
+    #    if (length(x.current) != l$time.steps) {
+    #      stop(paste(x2, "has", length(get(x2)), "elements, but there are", l$time.steps, "networks to be modeled."))
+    #    }
+    #    if (blockdiag == TRUE) {
+    #      # do not add brackets
+    #    } else {
+    #      x2 <- paste0(x2, "[[i]]")
+    #    }
+    #    l$rhs.terms[k] <- paste0(x1, x2, x3)
+    #  } else {  # something else --> try to convert to matrix list
+    #    tryCatch(
+    #      {
+    #        l[[x2]] <- list(rep(as.matrix(x.current)), l$time.steps)
+    #      },
+    #      error = function(cond) {stop(paste0("Object '", x2, "' could not be converted to a matrix."))}
+    #    )
+    #  }
     } else if (grepl("memory", l$rhs.terms[k])) {  # memory terms
       
       # extract type argument
