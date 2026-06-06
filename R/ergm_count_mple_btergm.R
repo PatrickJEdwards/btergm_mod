@@ -266,7 +266,7 @@ ergmCntMPLE_btergm <- function(formula,
   assign("nw0", nw0, envir = model_env)
   form0 <- stats::as.formula(paste("nw0 ~", rhs), env = model_env)
   
-  mod <- ergm::ergm_model(form0)
+  mod <- ergm::ergm_model(form0, term.options = list(interact.dependent = "warning"))
   
   np<-nparam(mod)
   parnam<- param_names(mod)
