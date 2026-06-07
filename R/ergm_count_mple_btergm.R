@@ -953,6 +953,38 @@ ergmCntPrep_btergm <- function(formula,
   
   if (verbose) message("Finished computing change scores.")
   
+  
+  # DIAGNOSTIC BLOCK:
+  bad_cs <- which(vapply(
+    cs,
+    function(x) {
+      is.null(x) ||
+        inherits(x, "try-error") ||
+        !(is.matrix(x) || is.data.frame(x) || is.vector(x)) ||
+        is.character(x)
+    },
+    logical(1)
+  ))
+  
+  if (length(bad_cs) > 0L) {
+    ii <- bad_cs[1]
+    
+    message("Bad change-score object found at edge-variable index: ", ii)
+    message("class(cs[[ii]]): ", paste(class(cs[[ii]]), collapse = ", "))
+    message("typeof(cs[[ii]]): ", typeof(cs[[ii]]))
+    message("str(cs[[ii]]):")
+    utils::str(cs[[ii]])
+    
+    stop(
+      "ergm.godfather() returned a non-numeric change-score object. ",
+      "This will fail in the count-MPLE C++ objective. Inspect cs[[",
+      ii,
+      "]].",
+      call. = FALSE
+    )
+  }
+  
+  
   #Return a list with all the goodies
   
   ## OLD CODE (1): 
