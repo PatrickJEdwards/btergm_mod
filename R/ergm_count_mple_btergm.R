@@ -939,7 +939,7 @@ ergmCntPrep_btergm <- function(formula,
   ## NEW CODE (5):
   #cs_fun <- function(i) {ergm::ergm.godfather(object = formula_gf, changes = lapply(yrng[[i]], function(z) {matrix(c(snd[i], rec[i], z), nrow = 1)}), response = response, changes.only = TRUE)}
   ## NEW CODE (6):
-  cs_fun <- function(i) {ergm::ergm.godfather(object = formula_gf, changes = lapply(yrng[[i]], function(z) {matrix(c(snd[i], rec[i], z), nrow = 1)}), response = response, changes.only = TRUE, term.options = list(interact.dependent = "warning"))}
+  cs_fun <- function(i) {ergm::ergm.godfather(object = formula_gf, changes = lapply(yrng[[i]], function(z) {matrix(c(snd[i], rec[i], z), nrow = 1)}), response = response, changes.only = TRUE, term.options = list(interact.dependent = "silent"))}
   
   # For PSOCK, avoid capturing the full local parent environment.
   if (prep.parallel == "psock" && cores > 1L) {environment(cs_fun) <- .GlobalEnv}
