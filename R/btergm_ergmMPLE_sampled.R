@@ -614,38 +614,32 @@ btergm_ergmMPLE_sampled <- function(
   # realigned so eta$offsettheta has the same length/order as out$predictor.
   if (output == "matrix" && !is.null(eta$offsettheta)) {
     
-    old_offsettheta <- eta$offsettheta
-    pred_names <- colnames(out$predictor)
+    full_names <- colnames(pl$xmat.full)
+    kept_cols <- !full_names %in% c("tail", "head")
     
-    if (!is.null(names(old_offsettheta)) &&
-        any(names(old_offsettheta) %in% pred_names)) {
+    if (length(eta$offsettheta) == length(full_names)) {
       
-      # Preferred path: map offset flags by column name.
-      offset_names <- names(old_offsettheta)[old_offsettheta]
-      eta$offsettheta <- pred_names %in% offset_names
+      # Preferred sampled-MPLE path:
+      # etamap corresponds to pl$xmat.full, so subset it by the same columns
+      # retained in out$predictor.
+      eta$offsettheta <- eta$offsettheta[kept_cols]
+      names(eta$offsettheta) <- full_names[kept_cols]
       
-    } else if (length(old_offsettheta) == length(pred_names)) {
+    } else if (length(eta$offsettheta) == ncol(out$predictor)) {
       
-      # Already aligned.
-      eta$offsettheta <- old_offsettheta
-      
-    } else if (!is.null(colnames(pl$xmat.full)) &&
-               length(old_offsettheta) == ncol(pl$xmat.full)) {
-      
-      # Common sampled-MPLE case: old etamap matches pl$xmat.full,
-      # but matrix output dropped tail/head.
-      keep <- !colnames(pl$xmat.full) %in% c("tail", "head")
-      eta$offsettheta <- old_offsettheta[keep]
+      # Already aligned with returned predictor.
+      names(eta$offsettheta) <- colnames(out$predictor)
       
     } else {
       
       stop(
         "Internal sampled MPLE error: etamap$offsettheta has length ",
-        length(old_offsettheta),
-        ", but the returned predictor matrix has ",
-        length(pred_names),
-        " columns. This usually means etamap was not realigned after ",
-        "dropping the internally added tail/head columns."
+        length(eta$offsettheta),
+        ", pl$xmat.full has ",
+        ncol(pl$xmat.full),
+        " columns, and returned predictor has ",
+        ncol(out$predictor),
+        " columns. Offset map cannot be safely aligned."
       )
     }
   }
