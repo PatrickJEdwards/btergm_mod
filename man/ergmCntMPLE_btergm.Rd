@@ -23,6 +23,8 @@ ergmCntMPLE_btergm(
   seed = NULL,
   must.count = 5,
   prep = NULL,
+  prep.parallel = c("auto", "fork", "psock", "serial"),
+  prep.cl = NULL,
   count_offset = NULL,
   WtSumAsSampSiz = TRUE,
   estimate.cov = TRUE,

@@ -299,6 +299,7 @@ btergm_count <- function(formula,
     WtSumAsSampSiz = WtSumAsSampSiz,
     mple.cores = mple.cores,                      # Full-sample MPLE call. Usually keep this at 1 for memory safety.
     estimate.cov = TRUE,                          # Full-sample fit can compute covariance for diagnostics.
+                                                  # Should probably set estimate.cov = FALSE because we derive bootstrap CIs from coefficient estimates
     env = environment(),
     verbose = verbose,
     ...

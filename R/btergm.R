@@ -466,8 +466,6 @@ setMethod(f = "summary", signature = "btergm", definition = function(object,
 
 #' Estimate a TERGM by MPLE with temporal bootstrapping
 #'
-#' Estimate a TERGM by MPLE with temporal bootstrapping.
-#'
 #' The \code{btergm} function computes temporal exponential random graph models
 #' (TERGM) by bootstrapped pseudolikelihood, as described in Desmarais and
 #' Cranmer (2012). It is faster than MCMC-MLE but only asymptotically unbiased
@@ -539,6 +537,18 @@ setMethod(f = "summary", signature = "btergm", definition = function(object,
 #'   \code{\link[speedglm:speedglm]{speedglm.wfit}} instead if available).
 #' @param verbose Print details about data preprocessing and estimation
 #'   settings.
+#' @param sample.size Target number of informative dyads to retain per time
+#'   step when dyad sampling is used. The default \code{Inf} preserves ordinary
+#'   \code{ergmMPLE()} behavior and uses all informative dyads.
+#' @param sample.method Dyad sampling method for MPLE preparation. One of
+#'   \code{"none"}, \code{"random"}, \code{"TNT"}, or \code{"all_ties"}.
+#'   The default \code{"none"} preserves ordinary \code{ergmMPLE()} behavior.
+#'   \code{"all_ties"} keeps all observed ties and samples non-ties.
+#' @param WtSumAsSampSiz Logical. If \code{TRUE}, inverse-probability weights
+#'   from dyad sampling are rescaled so that their sum equals the sampled dyad
+#'   count within each time step.
+#' @param sample.seed Optional random seed for MPLE dyad sampling. This affects
+#'   the sampled MPLE data created before the temporal bootstrap is run.
 #' @param ... Further arguments to be handed over to the
 #'   \code{\link[boot]{boot}} function.
 #'
@@ -707,12 +717,29 @@ btergm <- function(formula,
                    control.ergm = NULL,
                    usefastglm = FALSE,
                    verbose = TRUE,
+                   sample.size = Inf,
+                   sample.method = c("none", "random", "TNT", "all_ties"),
+                   WtSumAsSampSiz = TRUE,
+                   sample.seed = NULL,
                    ...) {
 
   if (is.null(control.ergm)) {
     control.ergm <- ergm::control.ergm()
   }
 
+  sample.method <- match.arg(sample.method)
+  
+  if (!is.numeric(sample.size) || length(sample.size) != 1L ||
+      is.na(sample.size) || sample.size <= 0) {
+    stop("sample.size must be a single positive numeric value or Inf.")
+  }
+  
+  if (!is.null(sample.seed) &&
+      (!is.numeric(sample.seed) || length(sample.seed) != 1L ||
+       is.na(sample.seed))) {
+    stop("sample.seed must be NULL or a single numeric value.")
+  }
+  
   # call tergmprepare and integrate results in local environment
   l <- tergmprepare(formula = formula, offset = offset, verbose = verbose)
   for (i in 1:length(l$covnames)) {
@@ -741,10 +768,30 @@ btergm <- function(formula,
     } else {
       offset.msg <- "with "
     }
+    
+    if (sample.method == "none" || is.infinite(sample.size)) {
+      sample.msg <- ""
+    } else {
+      sample.msg <- paste0(
+        " using ", sample.method,
+        " MPLE dyad sampling with sample.size = ", sample.size
+      )
+    }
+    
     message("\nStarting pseudolikelihood estimation ", offset.msg,
-          R, " bootstrapping replications ", parallel.msg, "...")
+            R, " bootstrapping replications ", parallel.msg, sample.msg, "...")
   } else if (verbose == TRUE && returndata == TRUE) {
     message("\nReturning data frame with change statistics.")
+  }
+  
+  # Create period-specific sampling seeds.
+  # If sample.seed is NULL, no seed is passed to sample_mple_fd().
+  # If sample.seed is supplied, generate one reproducible seed per time step.
+  if (is.null(sample.seed)) {
+    sample.seeds <- rep(list(NULL), length(l$networks))
+  } else {
+    set.seed(sample.seed)
+    sample.seeds <- as.list(sample.int(.Machine$integer.max, length(l$networks)))
   }
 
   # create MPLE data structures (with or without structural zeros)
@@ -753,7 +800,17 @@ btergm <- function(formula,
   W <- NULL  # weights for each observation
   O <- NULL  # offset term
   for (i in 1:length(l$networks)) {
-    pl <- ergm::ergmMPLE(form, control = control.ergm) # get the response, predictor matrix, weights, and offset values
+    #pl <- ergm::ergmMPLE(form, control = control.ergm) # get the response, predictor matrix, weights, and offset values
+    pl <- btergm_ergmMPLE_sampled(
+      formula = form,
+      output = "matrix",
+      control = control.ergm,
+      sample.size = sample.size,
+      sample.method = sample.method,
+      WtSumAsSampSiz = WtSumAsSampSiz,
+      seed = sample.seeds[[i]],
+      verbose = FALSE
+    )
     
     # Which columns of the MPLE predictor matrix are offset terms?
     # This can include both the built-in structural-zero offset from offset=TRUE

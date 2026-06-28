@@ -15,6 +15,10 @@ btergm(
   control.ergm = NULL,
   usefastglm = FALSE,
   verbose = TRUE,
+  sample.size = Inf,
+  sample.method = c("none", "random", "TNT", "all_ties"),
+  WtSumAsSampSiz = TRUE,
+  sample.seed = NULL,
   ...
 )
 }
@@ -94,13 +98,26 @@ Defaults to \code{FALSE} (and then uses
 \item{verbose}{Print details about data preprocessing and estimation
 settings.}
 
+\item{sample.size}{Target number of informative dyads to retain per time
+step when dyad sampling is used. The default \code{Inf} preserves ordinary
+\code{ergmMPLE()} behavior and uses all informative dyads.}
+
+\item{sample.method}{Dyad sampling method for MPLE preparation. One of
+\code{"none"}, \code{"random"}, \code{"TNT"}, or \code{"all_ties"}.
+The default \code{"none"} preserves ordinary \code{ergmMPLE()} behavior.
+\code{"all_ties"} keeps all observed ties and samples non-ties.}
+
+\item{WtSumAsSampSiz}{Logical. If \code{TRUE}, inverse-probability weights
+from dyad sampling are rescaled so that their sum equals the sampled dyad
+count within each time step.}
+
+\item{sample.seed}{Optional random seed for MPLE dyad sampling. This affects
+the sampled MPLE data created before the temporal bootstrap is run.}
+
 \item{...}{Further arguments to be handed over to the
 \code{\link[boot]{boot}} function.}
 }
 \description{
-Estimate a TERGM by MPLE with temporal bootstrapping.
-}
-\details{
 The \code{btergm} function computes temporal exponential random graph models
 (TERGM) by bootstrapped pseudolikelihood, as described in Desmarais and
 Cranmer (2012). It is faster than MCMC-MLE but only asymptotically unbiased
