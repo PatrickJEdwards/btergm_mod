@@ -815,7 +815,34 @@ btergm <- function(formula,
     # Which columns of the MPLE predictor matrix are offset terms?
     # This can include both the built-in structural-zero offset from offset=TRUE
     # and any user-supplied formula offsets such as offset(edgecov(...)).
-    offset_col_index <- which(attributes(pl)$etamap$offsettheta) # in which column of the predictor matrix are structural zeros stored (if any)?
+    #offset_col_index <- which(attributes(pl)$etamap$offsettheta) # in which column of the predictor matrix are structural zeros stored (if any)?
+    eta <- attributes(pl)$etamap
+    offset_col_index <- integer(0)
+    
+    if (!is.null(eta$offsettheta)) {
+      
+      if (!is.null(names(eta$offsettheta)) &&
+          any(names(eta$offsettheta) %in% colnames(pl$predictor))) {
+        
+        offset_names <- names(eta$offsettheta)[eta$offsettheta]
+        offset_col_index <- match(offset_names, colnames(pl$predictor), nomatch = 0L)
+        offset_col_index <- offset_col_index[offset_col_index > 0L]
+        
+      } else if (length(eta$offsettheta) == ncol(pl$predictor)) {
+        
+        offset_col_index <- which(eta$offsettheta)
+        
+      } else {
+        
+        stop(
+          "Internal offset map mismatch: etamap$offsettheta has length ",
+          length(eta$offsettheta),
+          ", but pl$predictor has ",
+          ncol(pl$predictor),
+          " columns. Check btergm_ergmMPLE_sampled() etamap alignment."
+        )
+      }
+    }
     
     # Combine all offset columns into one row-level forbidden-dyad indicator.
     # A dyad is excluded if ANY offset source marks it as structurally impossible.

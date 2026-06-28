@@ -607,5 +607,48 @@ btergm_ergmMPLE_sampled <- function(
     }
   )
   
-  structure(out, etamap = model$etamap)
+  eta <- model$etamap
+  
+  # For matrix output, btergm_ergmMPLE_sampled() drops the internally added
+  # tail/head columns before returning pl$predictor. The etamap must be
+  # realigned so eta$offsettheta has the same length/order as out$predictor.
+  if (output == "matrix" && !is.null(eta$offsettheta)) {
+    
+    old_offsettheta <- eta$offsettheta
+    pred_names <- colnames(out$predictor)
+    
+    if (!is.null(names(old_offsettheta)) &&
+        any(names(old_offsettheta) %in% pred_names)) {
+      
+      # Preferred path: map offset flags by column name.
+      offset_names <- names(old_offsettheta)[old_offsettheta]
+      eta$offsettheta <- pred_names %in% offset_names
+      
+    } else if (length(old_offsettheta) == length(pred_names)) {
+      
+      # Already aligned.
+      eta$offsettheta <- old_offsettheta
+      
+    } else if (!is.null(colnames(pl$xmat.full)) &&
+               length(old_offsettheta) == ncol(pl$xmat.full)) {
+      
+      # Common sampled-MPLE case: old etamap matches pl$xmat.full,
+      # but matrix output dropped tail/head.
+      keep <- !colnames(pl$xmat.full) %in% c("tail", "head")
+      eta$offsettheta <- old_offsettheta[keep]
+      
+    } else {
+      
+      stop(
+        "Internal sampled MPLE error: etamap$offsettheta has length ",
+        length(old_offsettheta),
+        ", but the returned predictor matrix has ",
+        length(pred_names),
+        " columns. This usually means etamap was not realigned after ",
+        "dropping the internally added tail/head columns."
+      )
+    }
+  }
+  
+  structure(out, etamap = eta)
 }
